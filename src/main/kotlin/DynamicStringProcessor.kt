@@ -3,72 +3,57 @@ package org.example
 import java.io.File
 import com.github.doyaaaaaken.kotlincsv.client.CsvReader
 import com.github.doyaaaaaken.kotlincsv.dsl.csvReader
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import java.io.FileInputStream
 
-class DynamicStringProcessor(private val projectRoot: String) {
-    fun execute(csvPath: String, targetKeys: List<String>, mode: String): TransResult {
+class DynamicStringProcessor(private val modulePathFromUI: String) {
+    private val xmlManager = XmlResourceManager()
+
+    fun process(excelPath: String, targetKeys: List<String>): String {
         return try {
-            val file = File(csvPath)
-            if (!file.exists()) return TransResult.Error("Không tìm thấy file CSV tại: $csvPath")
+            val workbook = XSSFWorkbook(FileInputStream(File(excelPath)))
+            val sheet = workbook.getSheetAt(0)
 
-            // Đọc toàn bộ file CSV vào bộ nhớ
-            val reader = getSafeCsvReader()
-            val rows: List<List<String>> = reader.readAll(file)
-            if (rows.size < 3) return TransResult.Error("File CSV thiếu dữ liệu (cần ít nhất 3 dòng)")
-
-            // 1. Lấy dòng mã ngôn ngữ (Dòng 2 - Index 1)
-            val langCodes = rows[1]
-
-            // Tạo map lưu trữ: Column Index -> Android Suffix (ví dụ: 3 -> "ar")
+            // Dòng 2: Mã ngôn ngữ
+            val langRow = sheet.getRow(1) ?: return "Lỗi: Excel thiếu dòng 2"
             val langMapping = mutableMapOf<Int, String>()
-            for (i in 1 until langCodes.size) {
-                val rawCode = langCodes[i].trim()
-                if (rawCode.isEmpty()) continue
 
-                // Cắt chuỗi lấy phần bên trái dấu '-' theo yêu cầu của bạn
-                val cleanCode = when {
-                    rawCode.equals("En", true) -> "" // values
-                    rawCode.equals("Vi", true) -> "vi" // values-vi
-                    rawCode.contains("-") -> rawCode.substringBefore("-").lowercase() // ar-SA -> ar
-                    else -> rawCode.lowercase()
-                }
-                langMapping[i] = cleanCode
+            for (cn in 1 until langRow.lastCellNum.toInt()) {
+                val code = langRow.getCell(cn)?.toString()?.trim() ?: continue
+                langMapping[cn] = mapToAndroidFolder(code)
             }
 
-            // 3. Lấy dữ liệu dịch thuật (Dòng 3 trở đi - Index 2)
-            val dataRows = rows.drop(2)
-            val xmlManager = XmlResourceManager(projectRoot)
-            val errors = mutableListOf<String>()
-
-            langMapping.forEach { (colIndex, langSuffix) ->
-                val folderName = if (langSuffix.isEmpty()) "values" else "values-$langSuffix"
+            // Duyệt từng cột ngôn ngữ
+            langMapping.forEach { (colIndex, folderName) ->
                 val translations = mutableMapOf<String, String>()
 
-                dataRows.forEach { row ->
-                    val key = row[0].trim() // Cột A là KEY
-                    if (key.isEmpty()) return@forEach
+                // Dòng 3 trở đi: Dữ liệu Key/Value
+                for (rn in 2..sheet.lastRowNum) {
+                    val row = sheet.getRow(rn) ?: continue
+                    val key = row.getCell(0)?.toString()?.trim() ?: continue
 
-                    // Nếu targetKeys trống -> lấy hết. Nếu có -> chỉ lấy key trong list.
-                    if (targetKeys.isEmpty() || targetKeys.contains(key)) {
-                        translations[key] = row.getOrElse(colIndex) { "" }
+                    if (key.isNotEmpty() && (targetKeys.isEmpty() || targetKeys.contains(key))) {
+                        val value = row.getCell(colIndex)?.toString() ?: ""
+                        translations[key] = value
                     }
                 }
 
-                // Thực thi ghi hoặc xóa
-                if (mode == "SYNC") {
-                    val currentErrors = StringValidator.checkErrors(translations)
-                    errors.addAll(currentErrors)
-                    xmlManager.updateStrings(folderName, translations)
-                } else {
-                    xmlManager.removeStrings(folderName, targetKeys)
-                }
-            }
-            if (errors.isNotEmpty()) {
-                println("⚠️ Cảnh báo lỗi Strings:\n${errors.joinToString("\n")}")
+                // TRUYỀN modulePathFromUI vào hàm updateStrings
+                xmlManager.updateStrings(this.modulePathFromUI, folderName, translations)
             }
 
-            TransResult.Success
+            workbook.close()
+            "Cập nhật thành công cho module: ${File(modulePathFromUI).name}"
         } catch (e: Exception) {
-            TransResult.Error("Quá trình xử lý thất bại: ${e.localizedMessage}")
+            "Lỗi: ${e.localizedMessage}"
+        }
+    }
+
+    private fun mapToAndroidFolder(code: String): String {
+        return when {
+            code.equals("En", true) -> "values"
+            code.contains("-") -> "values-${code.substringBefore("-").lowercase()}"
+            else -> "values-${code.lowercase()}"
         }
     }
 
