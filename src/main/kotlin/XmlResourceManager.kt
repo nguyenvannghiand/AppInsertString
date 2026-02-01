@@ -29,6 +29,9 @@ class XmlResourceManager {
         val root = doc.documentElement
         val logs = mutableListOf<String>()
 
+        // Biến cờ để kiểm tra xem có thay đổi nào thực sự diễn ra không
+        var isModified = false
+
         translations.forEach { (key, value) ->
             val escapedValue = escapeAndroidString(value)
             val existingElement = findElementByKey(root, key)
@@ -40,6 +43,7 @@ class XmlResourceManager {
                         logs.add("Key '$key' đã tồn tại trong $folderName")
                     } else {
                         addNewElement(doc, root, key, cdata)
+                        isModified = true // Đánh dấu đã thay đổi
                     }
                 }
                 "UPDATE_ONLY" -> {
@@ -47,18 +51,26 @@ class XmlResourceManager {
                         logs.add("Key '$key' không tồn tại trong $folderName (Cần add mới)")
                     } else {
                         replaceWithCleanElement(doc, root, existingElement, key, cdata)
+                        isModified = true // Đánh dấu đã thay đổi
                     }
                 }
-                else -> { // SYNC mode: Cả add và update
+                else -> { // SYNC mode
                     if (existingElement != null) {
                         replaceWithCleanElement(doc, root, existingElement, key, cdata)
+                        isModified = true // Đánh dấu đã thay đổi
                     } else {
                         addNewElement(doc, root, key, cdata)
+                        isModified = true // Đánh dấu đã thay đổi
                     }
                 }
             }
         }
-        saveDocument(doc, xmlFile)
+
+        // CHỈ LƯU FILE NẾU CÓ SỰ THAY ĐỔI THỰC SỰ
+        if (isModified) {
+            saveDocument(doc, xmlFile)
+        }
+
         return logs.joinToString(", ")
     }
 

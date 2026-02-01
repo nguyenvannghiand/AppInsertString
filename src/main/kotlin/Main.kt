@@ -9,7 +9,6 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
     private val txtProjectPath = JTextField()
     private val txtModulePath = JTextField()
 
-    // Thu nhỏ areaKeys xuống còn 7 dòng (giảm ~25% so với 10 dòng cũ)
     private val areaKeys = JTextArea(7, 40)
     private val lblStatus = JLabel("Sẵn sàng")
 
@@ -18,8 +17,9 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
     private val btnBrowseModule = JButton("...")
 
     private val btnSync = JButton("ADD / UPDATE") // Giữ nguyên chức năng Sync cũ
-    private val btnAddKeyOnly = JButton("ADD KEY")     // Chức năng mới 1
-    private val btnUpdateKeyOnly = JButton("UPDATE KEY") // Chức năng mới 2
+    private val btnAddKeyOnly = JButton("ADD KEY")     // Chức năng Add key input
+    private val btnUpdateKeyOnly = JButton("UPDATE KEY") // Chức năng  Update key input
+    private val btnRefresh = JButton("REFRESH") // Refresh UI
 
     init {
         setupLayout()
@@ -32,6 +32,7 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
     private fun setupLayout() {
         val mainPanel = JPanel(BorderLayout(15, 15)).apply { border = BorderFactory.createEmptyBorder(20, 20, 20, 20) }
 
+        // 1. Panel bên trái (Input đường dẫn)
         val inputPanel = JPanel(GridBagLayout()).apply {
             val gbc = GridBagConstraints().apply { fill = GridBagConstraints.HORIZONTAL; insets = Insets(5, 5, 5, 5) }
             gbc.gridy = 0; add(JLabel("1. File Excel (.xlsx):"), gbc)
@@ -45,15 +46,25 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
             gbc.gridx = 1; add(btnBrowseModule, gbc)
         }
 
+        // 2. Panel bên phải (Nhập Key và các nút thao tác)
         val rightPanel = JPanel(BorderLayout(0, 10)).apply {
             add(JLabel("Danh sách Key (mỗi dòng 1 key):"), BorderLayout.NORTH)
             add(JScrollPane(areaKeys), BorderLayout.CENTER)
 
-            // Panel chứa 2 nút chức năng mới nằm ngay dưới areaKeys
-            val subButtonPanel = JPanel(GridLayout(1, 2, 5, 0))
-            subButtonPanel.add(btnAddKeyOnly)
-            subButtonPanel.add(btnUpdateKeyOnly)
-            add(subButtonPanel, BorderLayout.SOUTH)
+            // Panel chứa các nút bấm dưới areaKeys
+            // Sử dụng GridLayout 2 dòng: Dòng 1 chứa Add/Update, Dòng 2 chứa Refresh
+            val combinedButtonPanel = JPanel(GridLayout(2, 1, 0, 5)) // 2 rows, 1 col, gap 5px
+
+            // Dòng 1: Add và Update nằm ngang
+            val row1Panel = JPanel(GridLayout(1, 2, 5, 0))
+            row1Panel.add(btnAddKeyOnly)
+            row1Panel.add(btnUpdateKeyOnly)
+
+            // Thêm vào container chung
+            combinedButtonPanel.add(row1Panel)
+            combinedButtonPanel.add(btnRefresh) // Dòng 2: Refresh nằm dưới
+
+            add(combinedButtonPanel, BorderLayout.SOUTH)
         }
 
         mainPanel.add(inputPanel, BorderLayout.CENTER)
@@ -73,7 +84,7 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
         btnBrowseProject.addActionListener { chooseDirectory(txtProjectPath) }
         btnBrowseModule.addActionListener { chooseDirectory(txtModulePath) }
 
-        // Chức năng cũ: Sync (Add/Update kết hợp)
+        // Chức năng cũ: Sync
         btnSync.addActionListener { executeTask("SYNC") }
 
         // Chức năng mới: Chỉ ADD
@@ -81,6 +92,14 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
 
         // Chức năng mới: Chỉ UPDATE
         btnUpdateKeyOnly.addActionListener { executeTask("UPDATE_ONLY") }
+
+        // --- Chức năng REFRESH ---
+        btnRefresh.addActionListener {
+            // 1. Xóa nội dung key nhập vào
+            areaKeys.text = ""
+            // 2. Đưa trạng thái về ban đầu
+            lblStatus.text = "Sẵn sàng"
+        }
     }
 
     private fun executeTask(mode: String) {
