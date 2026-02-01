@@ -7,20 +7,25 @@ import javax.swing.filechooser.FileNameExtensionFilter
 class StringMasterUI : JFrame("Android String Automation - Excel Version") {
     private val txtExcelPath = JTextField()
     private val txtProjectPath = JTextField()
-    private val txtModulePath = JTextField() // Ô nhập đường dẫn Module
-    private val areaKeys = JTextArea(10, 40)
+    private val txtModulePath = JTextField()
+
+    // Thu nhỏ areaKeys xuống còn 7 dòng (giảm ~25% so với 10 dòng cũ)
+    private val areaKeys = JTextArea(7, 40)
     private val lblStatus = JLabel("Sẵn sàng")
 
     private val btnBrowseExcel = JButton("...")
     private val btnBrowseProject = JButton("...")
-    private val btnBrowseModule = JButton("...") // Nút chọn Module
-    private val btnSync = JButton("ADD / UPDATE")
+    private val btnBrowseModule = JButton("...")
+
+    private val btnSync = JButton("ADD / UPDATE") // Giữ nguyên chức năng Sync cũ
+    private val btnAddKeyOnly = JButton("ADD KEY")     // Chức năng mới 1
+    private val btnUpdateKeyOnly = JButton("UPDATE KEY") // Chức năng mới 2
 
     init {
         setupLayout()
         setupEvents()
         defaultCloseOperation = EXIT_ON_CLOSE
-        setSize(900, 600)
+        setSize(950, 650)
         setLocationRelativeTo(null)
     }
 
@@ -29,31 +34,37 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
 
         val inputPanel = JPanel(GridBagLayout()).apply {
             val gbc = GridBagConstraints().apply { fill = GridBagConstraints.HORIZONTAL; insets = Insets(5, 5, 5, 5) }
-
-            // 1. Chọn file Excel
             gbc.gridy = 0; add(JLabel("1. File Excel (.xlsx):"), gbc)
             gbc.gridy = 1; gbc.weightx = 1.0; add(txtExcelPath, gbc)
             gbc.gridx = 1; add(btnBrowseExcel, gbc)
-
-            // 2. Chọn Gốc Dự án (Project Root)
             gbc.gridx = 0; gbc.gridy = 2; add(JLabel("2. Gốc dự án Android (Project Root):"), gbc)
             gbc.gridy = 3; gbc.weightx = 1.0; add(txtProjectPath, gbc)
             gbc.gridx = 1; add(btnBrowseProject, gbc)
-
-            // 3. Chọn Module (Nơi chứa res/values) - ĐÂY LÀ PHẦN MỚI
-            gbc.gridx = 0; gbc.gridy = 4; add(JLabel("3. Lựa chọn đường dẫn Module (Ví dụ: /app hoặc /core):"), gbc)
+            gbc.gridx = 0; gbc.gridy = 4; add(JLabel("3. Lựa chọn đường dẫn Module:"), gbc)
             gbc.gridy = 5; gbc.weightx = 1.0; add(txtModulePath, gbc)
             gbc.gridx = 1; add(btnBrowseModule, gbc)
         }
 
         val rightPanel = JPanel(BorderLayout(0, 10)).apply {
-            add(JLabel("Danh sách Key lọc (Để trống nếu muốn add hết):"), BorderLayout.NORTH)
+            add(JLabel("Danh sách Key (mỗi dòng 1 key):"), BorderLayout.NORTH)
             add(JScrollPane(areaKeys), BorderLayout.CENTER)
+
+            // Panel chứa 2 nút chức năng mới nằm ngay dưới areaKeys
+            val subButtonPanel = JPanel(GridLayout(1, 2, 5, 0))
+            subButtonPanel.add(btnAddKeyOnly)
+            subButtonPanel.add(btnUpdateKeyOnly)
+            add(subButtonPanel, BorderLayout.SOUTH)
         }
 
         mainPanel.add(inputPanel, BorderLayout.CENTER)
         mainPanel.add(rightPanel, BorderLayout.EAST)
-        mainPanel.add(JPanel(FlowLayout(FlowLayout.LEFT)).apply { add(btnSync); add(lblStatus) }, BorderLayout.SOUTH)
+
+        // Khu vực dưới cùng chứa nút Sync cũ và nhãn trạng thái
+        val bottomPanel = JPanel(FlowLayout(FlowLayout.LEFT))
+        bottomPanel.add(btnSync)
+        bottomPanel.add(lblStatus)
+        mainPanel.add(bottomPanel, BorderLayout.SOUTH)
+
         add(mainPanel)
     }
 
@@ -62,23 +73,31 @@ class StringMasterUI : JFrame("Android String Automation - Excel Version") {
         btnBrowseProject.addActionListener { chooseDirectory(txtProjectPath) }
         btnBrowseModule.addActionListener { chooseDirectory(txtModulePath) }
 
-        btnSync.addActionListener {
-            val excel = txtExcelPath.text
-            val module = txtModulePath.text // Lấy đường dẫn module
-            val keys = areaKeys.text.lines().filter { it.isNotBlank() }
+        // Chức năng cũ: Sync (Add/Update kết hợp)
+        btnSync.addActionListener { executeTask("SYNC") }
 
-            if (excel.isEmpty() || module.isEmpty()) {
-                lblStatus.text = "Lỗi: Vui lòng chọn đủ File Excel và Module!"
-                return@addActionListener
-            }
+        // Chức năng mới: Chỉ ADD
+        btnAddKeyOnly.addActionListener { executeTask("ADD_ONLY") }
 
-            Thread {
-                lblStatus.text = "Đang xử lý..."
-                // Truyền modulePath vào Processor
-                val result = DynamicStringProcessor(module).process(excel, keys)
-                lblStatus.text = result
-            }.start()
+        // Chức năng mới: Chỉ UPDATE
+        btnUpdateKeyOnly.addActionListener { executeTask("UPDATE_ONLY") }
+    }
+
+    private fun executeTask(mode: String) {
+        val excel = txtExcelPath.text
+        val module = txtModulePath.text
+        val keys = areaKeys.text.lines().map { it.trim() }.filter { it.isNotBlank() }
+
+        if (excel.isEmpty() || module.isEmpty()) {
+            lblStatus.text = "Lỗi: Vui lòng chọn file Excel và Module!"
+            return
         }
+
+        Thread {
+            lblStatus.text = "Đang thực hiện $mode..."
+            val result = DynamicStringProcessor(module).process(excel, keys, mode)
+            lblStatus.text = "<html>$result</html>"
+        }.start()
     }
 
     private fun chooseFile(target: JTextField) {

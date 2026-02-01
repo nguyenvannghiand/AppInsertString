@@ -9,12 +9,11 @@ import java.io.FileInputStream
 class DynamicStringProcessor(private val modulePathFromUI: String) {
     private val xmlManager = XmlResourceManager()
 
-    fun process(excelPath: String, targetKeys: List<String>): String {
+    fun process(excelPath: String, targetKeys: List<String>, mode: String = "SYNC"): String {
         return try {
             val workbook = XSSFWorkbook(FileInputStream(File(excelPath)))
             val sheet = workbook.getSheetAt(0)
 
-            // Dòng 2: Mã ngôn ngữ
             val langRow = sheet.getRow(1) ?: return "Lỗi: Excel thiếu dòng 2"
             val langMapping = mutableMapOf<Int, String>()
 
@@ -23,27 +22,25 @@ class DynamicStringProcessor(private val modulePathFromUI: String) {
                 langMapping[cn] = mapToAndroidFolder(code)
             }
 
-            // Duyệt từng cột ngôn ngữ
+            val finalLogs = mutableListOf<String>()
+
             langMapping.forEach { (colIndex, folderName) ->
                 val translations = mutableMapOf<String, String>()
-
-                // Dòng 3 trở đi: Dữ liệu Key/Value
                 for (rn in 2..sheet.lastRowNum) {
                     val row = sheet.getRow(rn) ?: continue
                     val key = row.getCell(0)?.toString()?.trim() ?: continue
-
                     if (key.isNotEmpty() && (targetKeys.isEmpty() || targetKeys.contains(key))) {
-                        val value = row.getCell(colIndex)?.toString() ?: ""
-                        translations[key] = value
+                        translations[key] = row.getCell(colIndex)?.toString() ?: ""
                     }
                 }
 
-                // TRUYỀN modulePathFromUI vào hàm updateStrings
-                xmlManager.updateStrings(this.modulePathFromUI, folderName, translations)
+                // Gọi XmlResourceManager với mode cụ thể
+                val log = xmlManager.updateStrings(this.modulePathFromUI, folderName, translations, mode)
+                if (log.isNotEmpty()) finalLogs.add(log)
             }
 
             workbook.close()
-            "Cập nhật thành công cho module: ${File(modulePathFromUI).name}"
+            if (finalLogs.isEmpty()) "Thành công!" else finalLogs.distinct().joinToString("<br>")
         } catch (e: Exception) {
             "Lỗi: ${e.localizedMessage}"
         }
@@ -54,16 +51,6 @@ class DynamicStringProcessor(private val modulePathFromUI: String) {
             code.equals("En", true) -> "values"
             code.contains("-") -> "values-${code.substringBefore("-").lowercase()}"
             else -> "values-${code.lowercase()}"
-        }
-    }
-
-    private fun getSafeCsvReader(): CsvReader {
-        return csvReader {
-            charset = "UTF-8"
-            quoteChar = '\"'
-            delimiter = ','
-            escapeChar = '\\'
-            skipEmptyLine = true
         }
     }
 }

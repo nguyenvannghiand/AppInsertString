@@ -1,5 +1,6 @@
 package org.example
 
+import org.w3c.dom.CDATASection
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -11,14 +12,12 @@ import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 
 class XmlResourceManager {
-    fun updateStrings(modulePath: String, folderName: String, translations: Map<String, String>) {
+    fun updateStrings(modulePath: String, folderName: String, translations: Map<String, String>, mode: String): String {
         val resDir = File("$modulePath/src/main/res/$folderName")
         if (!resDir.exists()) resDir.mkdirs()
 
         val xmlFile = File(resDir, "strings.xml")
         val dbf = DocumentBuilderFactory.newInstance()
-
-        // QUAN TRỌNG: Không bỏ qua khoảng trắng để giữ nguyên các phân cụm cũ
         dbf.isIgnoringElementContentWhitespace = false
 
         val doc = if (xmlFile.exists()) {
@@ -28,46 +27,63 @@ class XmlResourceManager {
         }
 
         val root = doc.documentElement
+        val logs = mutableListOf<String>()
 
         translations.forEach { (key, value) ->
             val escapedValue = escapeAndroidString(value)
             val existingElement = findElementByKey(root, key)
-
-            // Bước 1: Tạo CDATA section trước
             val cdata = doc.createCDATASection(escapedValue)
 
-            if (existingElement != null) {
-                // GIẢI PHÁP MỚI: Tạo một thẻ string mới hoàn toàn để thay thế thẻ cũ bị lỗi
-                val newCleanElement = doc.createElement("string")
-                newCleanElement.setAttribute("name", key)
-
-                // Sao chép các thuộc tính khác nếu có (ví dụ: translatable="false")
-                val attrs = existingElement.attributes
-                for (i in 0 until attrs.length) {
-                    val attr = attrs.item(i)
-                    newCleanElement.setAttribute(attr.nodeName, attr.nodeValue)
+            when (mode) {
+                "ADD_ONLY" -> {
+                    if (existingElement != null) {
+                        logs.add("Key '$key' đã tồn tại trong $folderName")
+                    } else {
+                        addNewElement(doc, root, key, cdata)
+                    }
                 }
-
-                // Chèn CDATA vào thẻ sạch
-                newCleanElement.appendChild(cdata)
-
-                // Thay thế thẻ cũ bằng thẻ sạch trên cây DOM
-                root.replaceChild(newCleanElement, existingElement)
-            } else {
-                // Logic cho Key mới
-                root.appendChild(doc.createTextNode("\n    "))
-                val newString = doc.createElement("string")
-                newString.setAttribute("name", key)
-                newString.appendChild(cdata)
-                root.appendChild(newString)
+                "UPDATE_ONLY" -> {
+                    if (existingElement == null) {
+                        logs.add("Key '$key' không tồn tại trong $folderName (Cần add mới)")
+                    } else {
+                        replaceWithCleanElement(doc, root, existingElement, key, cdata)
+                    }
+                }
+                else -> { // SYNC mode: Cả add và update
+                    if (existingElement != null) {
+                        replaceWithCleanElement(doc, root, existingElement, key, cdata)
+                    } else {
+                        addNewElement(doc, root, key, cdata)
+                    }
+                }
             }
         }
         saveDocument(doc, xmlFile)
+        return logs.joinToString(", ")
+    }
+
+    private fun addNewElement(doc: Document, root: Element, key: String, cdata: CDATASection) {
+        root.appendChild(doc.createTextNode("\n    "))
+        val newString = doc.createElement("string")
+        newString.setAttribute("name", key)
+        newString.appendChild(cdata)
+        root.appendChild(newString)
+    }
+
+    private fun replaceWithCleanElement(doc: Document, root: Element, oldEl: Element, key: String, cdata: CDATASection) {
+        val newEl = doc.createElement("string")
+        newEl.setAttribute("name", key)
+        val attrs = oldEl.attributes
+        for (i in 0 until attrs.length) {
+            val attr = attrs.item(i)
+            newEl.setAttribute(attr.nodeName, attr.nodeValue)
+        }
+        newEl.appendChild(cdata)
+        root.replaceChild(newEl, oldEl)
     }
 
     private fun escapeAndroidString(input: String): String {
-        return input.replace("'", "\\'").replace("’", "\\’")
-            .replace("\"", "\\\"")
+        return input.replace("'", "\\'").replace("’", "\\’").replace("\"", "\\\"")
     }
 
     private fun findElementByKey(root: Element, key: String): Element? {
@@ -81,24 +97,15 @@ class XmlResourceManager {
 
     private fun createNewStringsDocument(): Document {
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument()
-        val root = doc.createElement("resources")
-        doc.appendChild(root)
+        doc.appendChild(doc.createElement("resources"))
         return doc
     }
 
     private fun saveDocument(doc: Document, file: File) {
         val transformer = TransformerFactory.newInstance().newTransformer()
-
-        // GIẢI PHÁP TRIỆT ĐỂ:
-        // Đổi INDENT thành "no" để Transformer không tự ý chèn thêm dòng trống xen kẽ
         transformer.setOutputProperty(OutputKeys.INDENT, "no")
         transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes")
-
-        // Đảm bảo encoding chuẩn
         transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8")
-
-        val source = DOMSource(doc)
-        val result = StreamResult(file)
-        transformer.transform(source, result)
+        transformer.transform(DOMSource(doc), StreamResult(file))
     }
 }
