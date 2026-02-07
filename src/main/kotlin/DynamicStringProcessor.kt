@@ -1,9 +1,7 @@
 package org.example
 
-import java.io.File
-import com.github.doyaaaaaken.kotlincsv.client.CsvReader
-import com.github.doyaaaaaken.kotlincsv.dsl.csvReader
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import java.io.File
 import java.io.FileInputStream
 
 class DynamicStringProcessor(private val modulePathFromUI: String) {
@@ -29,18 +27,20 @@ class DynamicStringProcessor(private val modulePathFromUI: String) {
                 for (rn in 2..sheet.lastRowNum) {
                     val row = sheet.getRow(rn) ?: continue
                     val key = row.getCell(0)?.toString()?.trim() ?: continue
+
+                    // Logic lọc Key theo danh sách nhập vào (nếu có)
                     if (key.isNotEmpty() && (targetKeys.isEmpty() || targetKeys.contains(key))) {
                         translations[key] = row.getCell(colIndex)?.toString() ?: ""
                     }
                 }
 
-                // Gọi XmlResourceManager với mode cụ thể
+                // Gọi XmlResourceManager với đường dẫn module lấy từ UI
                 val log = xmlManager.updateStrings(this.modulePathFromUI, folderName, translations, mode)
                 if (log.isNotEmpty()) finalLogs.add(log)
             }
 
             workbook.close()
-            if (finalLogs.isEmpty()) "Thành công!" else finalLogs.distinct().joinToString("<br>")
+            if (finalLogs.isEmpty()) "Thành công!" else finalLogs.distinct().joinToString("\n")
         } catch (e: Exception) {
             "Lỗi: ${e.localizedMessage}"
         }

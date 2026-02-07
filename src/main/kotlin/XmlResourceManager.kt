@@ -5,6 +5,7 @@ import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.File
+import java.io.StringWriter
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.transform.OutputKeys
 import javax.xml.transform.TransformerFactory
@@ -29,7 +30,7 @@ class XmlResourceManager {
         val root = doc.documentElement
         val logs = mutableListOf<String>()
 
-        // Biến cờ để kiểm tra xem có thay đổi nào thực sự diễn ra không
+        // Biến cờ kiểm tra thay đổi
         var isModified = false
 
         translations.forEach { (key, value) ->
@@ -43,7 +44,7 @@ class XmlResourceManager {
                         logs.add("Key '$key' đã tồn tại trong $folderName")
                     } else {
                         addNewElement(doc, root, key, cdata)
-                        isModified = true // Đánh dấu đã thay đổi
+                        isModified = true
                     }
                 }
                 "UPDATE_ONLY" -> {
@@ -51,16 +52,16 @@ class XmlResourceManager {
                         logs.add("Key '$key' không tồn tại trong $folderName (Cần add mới)")
                     } else {
                         replaceWithCleanElement(doc, root, existingElement, key, cdata)
-                        isModified = true // Đánh dấu đã thay đổi
+                        isModified = true
                     }
                 }
                 else -> { // SYNC mode
                     if (existingElement != null) {
                         replaceWithCleanElement(doc, root, existingElement, key, cdata)
-                        isModified = true // Đánh dấu đã thay đổi
+                        isModified = true
                     } else {
                         addNewElement(doc, root, key, cdata)
-                        isModified = true // Đánh dấu đã thay đổi
+                        isModified = true
                     }
                 }
             }
@@ -113,11 +114,27 @@ class XmlResourceManager {
         return doc
     }
 
+    // --- HÀM SAVE ĐƯỢC VIẾT LẠI HOÀN TOÀN ĐỂ FIX LỖI GIT ---
     private fun saveDocument(doc: Document, file: File) {
         val transformer = TransformerFactory.newInstance().newTransformer()
-        transformer.setOutputProperty(OutputKeys.INDENT, "no")
+
+        // 1. TẮT việc tự động sinh header (để mình tự viết thủ công)
         transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes")
+
+        // 2. Giữ nguyên format nội dung (không indent tự động)
+        transformer.setOutputProperty(OutputKeys.INDENT, "no")
         transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8")
-        transformer.transform(DOMSource(doc), StreamResult(file))
+
+        // 3. Ghi nội dung XML (bắt đầu từ <resources>) vào bộ nhớ đệm StringWriter
+        val writer = StringWriter()
+        transformer.transform(DOMSource(doc), StreamResult(writer))
+        val xmlBody = writer.toString()
+
+        // 4. Tự tay viết chuỗi Header chuẩn y hệt file cũ của bạn (bao gồm cả ký tự xuống dòng \n)
+        // Lưu ý: Chuỗi này khớp 100% với ảnh Screenshot_6 bạn gửi
+        val customHeader = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"
+
+        // 5. Nối Header + Body và ghi đè vào file với encoding UTF-8
+        file.writeText(customHeader + xmlBody, java.nio.charset.StandardCharsets.UTF_8)
     }
 }
