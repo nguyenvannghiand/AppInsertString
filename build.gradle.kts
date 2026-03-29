@@ -1,5 +1,10 @@
+import org.gradle.api.file.DuplicatesStrategy
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
-    kotlin("jvm") version "2.3.0"
+    kotlin("jvm") version "2.0.0"
+    java
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "org.example"
@@ -10,27 +15,28 @@ repositories {
 }
 
 dependencies {
-    testImplementation(kotlin("test"))
-
+    implementation(kotlin("stdlib"))
     implementation("com.github.doyaaaaaken:kotlin-csv-jvm:1.9.3")
     implementation("org.apache.poi:poi-ooxml:5.2.3")
     implementation("org.apache.logging.log4j:log4j-core:2.19.0")
-    implementation(kotlin("stdlib"))
+    testImplementation(kotlin("test"))
 }
 
-kotlin {
-    jvmToolchain(18)
-}
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    archiveClassifier.set("all")
+    mergeServiceFiles()
 
-tasks.jar {
     manifest {
-        attributes["Main-Class"] = "MainKt"
+        // PHẢI có tên package ở phía trước
+        attributes["Main-Class"] = "org.example.MainKt"
     }
-    // Đóng gói tất cả thư viện vào 1 file JAR duy nhất
-    from({
-        configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) }
-    })
+
+    // Sửa lỗi "Could not add META-INF" bằng cách bỏ qua các file trùng từ thư viện
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    // Loại bỏ các file chữ ký số gây lỗi ZIP (SF, DSA, RSA)
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    exclude("META-INF/LICENSE*", "META-INF/NOTICE*")
 }
 
 tasks.test {
