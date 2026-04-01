@@ -36,33 +36,32 @@ class XmlResourceManager {
         translations.forEach { (key, value) ->
             val escapedValue = escapeAndroidString(value)
             val existingElement = findElementByKey(root, key)
-            val cdata = doc.createCDATASection(escapedValue)
+            // BỎ DÒNG: val cdata = doc.createCDATASection(escapedValue)
 
             when (mode) {
                 "ADD_ONLY" -> {
                     if (existingElement != null) {
                         logs.add("Key '$key' đã tồn tại trong $folderName")
                     } else {
-                        addNewElement(doc, root, key, cdata)
+                        addNewElement(doc, root, key, escapedValue) // Truyền escapedValue
                         isModified = true
                     }
                 }
                 "UPDATE_ONLY" -> {
                     if (existingElement == null) {
-                        logs.add("Key '$key' không tồn tại trong $folderName (Cần add mới)")
+                        logs.add("Key '$key' không tồn tại (Cần add mới)")
                     } else {
-                        replaceWithCleanElement(doc, root, existingElement, key, cdata)
+                        replaceWithCleanElement(doc, root, existingElement, key, escapedValue) // Truyền escapedValue
                         isModified = true
                     }
                 }
                 else -> { // SYNC mode
                     if (existingElement != null) {
-                        replaceWithCleanElement(doc, root, existingElement, key, cdata)
-                        isModified = true
+                        replaceWithCleanElement(doc, root, existingElement, key, escapedValue)
                     } else {
-                        addNewElement(doc, root, key, cdata)
-                        isModified = true
+                        addNewElement(doc, root, key, escapedValue)
                     }
+                    isModified = true
                 }
             }
         }
@@ -75,28 +74,42 @@ class XmlResourceManager {
         return logs.joinToString(", ")
     }
 
-    private fun addNewElement(doc: Document, root: Element, key: String, cdata: CDATASection) {
+    private fun addNewElement(doc: Document, root: Element, key: String, escapedValue: String) {
         root.appendChild(doc.createTextNode("\n    "))
         val newString = doc.createElement("string")
         newString.setAttribute("name", key)
-        newString.appendChild(cdata)
+
+        // Sử dụng createTextNode thay vì createCDATASection
+        newString.appendChild(doc.createTextNode(escapedValue))
+
         root.appendChild(newString)
     }
 
-    private fun replaceWithCleanElement(doc: Document, root: Element, oldEl: Element, key: String, cdata: CDATASection) {
+    private fun replaceWithCleanElement(doc: Document, root: Element, oldEl: Element, key: String, escapedValue: String) {
         val newEl = doc.createElement("string")
         newEl.setAttribute("name", key)
+
+        // Copy lại các attributes cũ (nếu có như translatable="false")
         val attrs = oldEl.attributes
         for (i in 0 until attrs.length) {
             val attr = attrs.item(i)
             newEl.setAttribute(attr.nodeName, attr.nodeValue)
         }
-        newEl.appendChild(cdata)
+
+        // Sử dụng createTextNode
+        newEl.appendChild(doc.createTextNode(escapedValue))
+
         root.replaceChild(newEl, oldEl)
     }
 
     private fun escapeAndroidString(input: String): String {
-        return input.replace("'", "\\'").replace("’", "\\’").replace("\"", "\\\"")
+        return input
+            .replace("&", "&amp;") // XML bắt buộc
+            .replace("<", "&lt;")   // XML bắt buộc
+            .replace(">", "&gt;")   // XML bắt buộc
+            .replace("'", "\\'")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
     }
 
     private fun findElementByKey(root: Element, key: String): Element? {
