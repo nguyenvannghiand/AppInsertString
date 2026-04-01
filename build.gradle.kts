@@ -1,10 +1,10 @@
 import org.gradle.api.file.DuplicatesStrategy
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.tasks.JavaExec
 
 plugins {
     kotlin("jvm") version "2.0.0"
     java
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("com.gradleup.shadow") version "8.3.10"
 }
 
 group = "org.example"
@@ -24,19 +24,29 @@ dependencies {
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     archiveClassifier.set("all")
-    mergeServiceFiles()
 
     manifest {
-        // PHẢI có tên package ở phía trước
         attributes["Main-Class"] = "org.example.MainKt"
     }
 
-    // Sửa lỗi "Could not add META-INF" bằng cách bỏ qua các file trùng từ thư viện
+    // Tạm thời KHÔNG merge service files để tránh lỗi META-INF
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    // Loại bỏ các file chữ ký số gây lỗi ZIP (SF, DSA, RSA)
+    exclude("META-INF/INDEX.LIST")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
     exclude("META-INF/LICENSE*", "META-INF/NOTICE*")
+    exclude("META-INF/versions/**/module-info.class")
+    exclude("module-info.class")
+}
+
+tasks.register<JavaExec>("runApp") {
+    group = "application"
+    description = "Run the desktop app"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("org.example.MainKt")
+    environment("DISPLAY", ":1")
+    environment("XAUTHORITY", "/home/nghianv/.Xauthority")
+    jvmArgs("-Djava.awt.headless=false")
 }
 
 tasks.test {
